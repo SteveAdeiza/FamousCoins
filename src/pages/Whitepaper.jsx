@@ -1,35 +1,16 @@
-import Navbar from '../components/Navbar'
-
 export default function Whitepaper(){
-  return(
-    <div>
-      <Navbar />
-
-      <div className='p-10 max-w-4xl mx-auto'>
-        <h1 className='text-5xl mb-8 text-yellow-400'>
-          Famous Coins Whitepaper
-        </h1>
-
-        <h2 className='text-3xl mt-8 mb-3'>Introduction</h2>
-        <p>
-          Famous Coins (FC) is a decentralized mining and rewards ecosystem.
-        </p>
-
-        <h2 className='text-3xl mt-8 mb-3'>Vision</h2>
-        <p>
-          Build a secure mining platform for global users.
-        </p>
-
-        <h2 className='text-3xl mt-8 mb-3'>Mining</h2>
-        <p>
-          Users earn FC tokens through cloud mining activities.
-        </p>
-
-        <h2 className='text-3xl mt-8 mb-3'>Roadmap</h2>
-        <p>
-          Launch website, token, wallet, exchange listings and mobile app.
-        </p>
-      </div>
-    </div>
-  )
+ return <div className='min-h-screen bg-black text-white p-10 max-w-5xl mx-auto'>
+  <h1 className='text-5xl font-black text-yellow-400'>FMC Whitepaper</h1>
+  <p className='mt-6 text-lg text-gray-300'>Famous Coins (FMC) is a free mining and community reward ecosystem focused on engagement, referrals, and future blockchain expansion on BNB Smart Chain.</p>
+  <h2 className='mt-10 text-3xl font-bold'>Vision</h2>
+  <p className='mt-4 text-gray-300'>Build a premium Web3 community ecosystem where users can participate in mining simulations, earn activity rewards, and grow through referrals.</p>
+  <h2 className='mt-10 text-3xl font-bold'>Core Features</h2>
+  <ul className='list-disc ml-6 mt-4 text-gray-300'>
+   <li>Free mining engine</li>
+   <li>Referral reward system</li>
+   <li>Realtime mining activity</li>
+   <li>Wallet integrations</li>
+   <li>Daily reward boosts</li>
+  </ul>
+ </div>
 }
