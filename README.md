@@ -1,15 +1,6 @@
-# Famous Coins (FC)
-
-Crypto mining and earning platform built with React + Vite.
-
-## Install
-
-npm install
+# Famous Coins FMC
+Premium futuristic Web3 mining platform.
 
 ## Run
-
+npm install
 npm run dev
-
-## Build
-
-npm run build
