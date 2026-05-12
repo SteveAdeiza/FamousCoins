@@ -4,7 +4,7 @@ export default function MiningCard({balance, mining, setMining}){
       <h2 className='text-3xl mb-4'>Mining Balance</h2>
 
       <p className='text-5xl text-yellow-400 mb-5'>
-        {balance.toFixed(2)} FC
+        {balance.toFixed(2)} FMC
       </p>
 
       <button
