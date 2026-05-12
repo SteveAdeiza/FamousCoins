@@ -1,13 +1,4 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-body{
-  margin:0;
-  background:#050505;
-  color:white;
-  font-family:Arial, sans-serif;
-}
-input{
-  width:100%;
-}
+body{font-family:Inter,sans-serif;background:black}
