@@ -4,11 +4,11 @@ export default function ReferralCard(){
       <h2 className='text-2xl mb-4'>Referral System</h2>
 
       <p>
-        Share your referral link and earn bonus FC coins.
+        Share your referral link and earn bonus FMC coins.
       </p>
 
       <div className='bg-black p-3 rounded-xl mt-4 overflow-auto'>
-        https://famouscoins.vercel.app/register?ref=FC001
+        https://famouscoins.vercel.app/register?ref=FMC001
       </div>
     </div>
   )
