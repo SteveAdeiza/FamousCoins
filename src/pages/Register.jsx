@@ -19,6 +19,8 @@ export default function Register() {
   const navigate = useNavigate();
 
   const ADMIN_EMAIL = "dstevinho@gmail.com";
+  const SUPPORT_EMAIL = "famouscoins.help@gmail.com";
+  const TELEGRAM_LINK = "https://t.me/FamousCoins001";
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
@@ -165,7 +167,25 @@ export default function Register() {
             {isLogin? "Sign Up" : "Login"}
           </button>
         </p>
+
+        {/* Footer with Telegram and Support Email */}
+        <div className="mt-6 pt-4 border-t border-gray-700 text-center space-y-2">
+          <p className="text-gray-400 text-sm">
+            Join our Telegram: 
+            <a 
+              href={TELEGRAM_LINK} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-purple-400 hover:underline ml-1 font-semibold"
+            >
+              t.me/FamousCoins001
+            </a>
+          </p>
+          <p className="text-gray-500 text-xs">
+            Support: {SUPPORT_EMAIL}
+          </p>
+        </div>
       </div>
     </div>
   );
-}
+      }
