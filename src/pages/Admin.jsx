@@ -74,7 +74,7 @@ export default function Admin() {
           <div className="p-4 bg-black/40">
             <h2 className="text-xl font-bold text-white">All Users - {users.length}</h2>
           </div>
-          
+
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead className="bg-black/60">
@@ -106,3 +106,23 @@ export default function Admin() {
                           if (newBal!== null) updateBalance(user.id, parseFloat(newBal));
                         }}
                         className="bg-blue-600 px-2 py-1 rounded text-white text-xs mr-2"
+                      >
+                        Edit Bal
+                      </button>
+                      <button
+                        onClick={() => toggleAdmin(user.id, user.isAdmin)}
+                        className="bg-yellow-600 px-2 py-1 rounded text-white text-xs"
+                      >
+                        Toggle Admin
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+                }
