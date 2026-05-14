@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { doc, getDoc, updateDoc, collection, query, where, getDocs } from "firebase/firestore";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { auth, db } from "../firebase";
 
 export default function Dashboard() {
@@ -26,12 +26,12 @@ export default function Dashboard() {
       const docSnap = await getDoc(docRef);
       if (docSnap.exists()) {
         const data = docSnap.data();
-        
+
         if (data.mining) {
           const now = Date.now();
-          const timeDiff = (now - data.lastClaim) / 1000; // seconds
+          const timeDiff = (now - data.lastClaim) / 1000;
           const earned = timeDiff * MINING_RATE;
-          const newBalance = data.balance + earned;
+          const newBalance = (data.balance || 0) + earned;
           await updateDoc(docRef, { balance: newBalance, lastClaim: now });
           data.balance = newBalance;
           data.lastClaim = now;
@@ -50,7 +50,7 @@ export default function Dashboard() {
     const now = Date.now();
     const timeDiff = (now - userData.lastClaim) / 1000;
     const earned = timeDiff * MINING_RATE;
-    const newBalance = userData.balance + earned;
+    const newBalance = (userData.balance || 0) + earned;
     await updateDoc(docRef, { balance: newBalance, lastClaim: now });
     setUserData({...userData, balance: newBalance, lastClaim: now });
     setClaimLoading(false);
@@ -82,11 +82,11 @@ export default function Dashboard() {
 
         <div className="bg-gray-900/80 backdrop-blur-md p-6 rounded-2xl border border-purple-500/30 mb-4">
           <p className="text-gray-400 text-sm">Welcome,</p>
-          <h2 className="text-xl font-bold text-white mb-4">{userData?.username}</h2>
-          
+          <h2 className="text-xl font-bold text-white mb-4">{userData?.username || "User"}</h2>
+
           <div className="bg-black/40 p-6 rounded-xl text-center mb-4">
             <p className="text-gray-400 text-sm mb-2">Your Balance</p>
-            <h3 className="text-4xl font-bold text-purple-400">{userData?.balance.toFixed(5)} FMC</h3>
+            <h3 className="text-4xl font-bold text-purple-400">{(userData?.balance || 0).toFixed(5)} FMC</h3>
             <p className="text-gray-500 text-xs mt-2">Mining at {MINING_RATE} FMC/sec</p>
           </div>
 
@@ -98,25 +98,25 @@ export default function Dashboard() {
             {claimLoading? "Claiming..." : "Claim FMC Now"}
           </button>
 
-          <div className="bg-yellow-500/10 border border-yellow-500/30 p-3 rounded-lg">
+          <div className="bg-yellow-500/10 border-yellow-500/30 p-3 rounded-lg">
             <p className="text-yellow-300 text-xs text-center">
               Min Withdrawal: {MIN_WITHDRAWAL} FMC - Contact Admin to withdraw
             </p>
           </div>
         </div>
 
-        <div className="bg-gray-900/80 backdrop-blur-md p-6 rounded-2xl border border-purple-500/30">
+        <div className="bg-gray-900/80 backdrop-blur-md p-6 rounded-2xl border-purple-500/30">
           <h3 className="text-lg font-bold text-white mb-3">Your Referral Code</h3>
           <div className="bg-black/40 p-4 rounded-lg flex justify-between items-center">
-            <span className="text-purple-400 font-mono text-lg">{userData?.referralCode}</span>
-            <button 
-              onClick={() => navigator.clipboard.writeText(userData?.referralCode)}
+            <span className="text-purple-400 font-mono text-lg">{userData?.referralCode || "----"}</span>
+            <button
+              onClick={() => navigator.clipboard.writeText(userData?.referralCode || "")}
               className="bg-purple-600 px-3 py-1 rounded text-white text-sm"
             >
               Copy
             </button>
           </div>
-          <p className="text-gray-400 text-xs mt-2">Total Referrals: {userData?.referrals}</p>
+          <p className="text-gray-400 text-xs mt-2">Total Referrals: {userData?.referrals || 0}</p>
         </div>
       </div>
     </div>
