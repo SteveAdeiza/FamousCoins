@@ -10,11 +10,12 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [timeLeft, setTimeLeft] = useState("");
+  const [isMining, setIsMining] = useState(false);
   const navigate = useNavigate();
 
   const MINING_RATE = 0.00005;
   const MIN_WITHDRAWAL = 1000;
-  const CLAIM_INTERVAL = 24 * 60 * 60 * 1000;
+  const MINING_SESSION = 24 * 60 * 60 * 1000; // 24 hours
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (currentUser) => {
@@ -28,47 +29,40 @@ export default function Dashboard() {
         const docRef = doc(db, "users", currentUser.uid);
         const docSnap = await getDoc(docRef);
 
-        let data;
         if (docSnap.exists()) {
-          data = docSnap.data();
+          const data = docSnap.data();
 
-          // Fix missing fields for old accounts
-          if (!data.lastClaim) {
-            data.lastClaim = Date.now();
-            data.mining = true;
-            data.balance = data.balance || 0;
-            data.createdAt = data.createdAt || Date.now();
-            data.username = data.username || currentUser.displayName || "User";
-            await setDoc(docRef, data, { merge: true });
+          // Fix missing username
+          if (!data.username) {
+            data.username = currentUser.displayName || "User";
+            await updateDoc(docRef, { username: data.username });
           }
 
-          // Auto-claim if 24h passed
+          // Check if mining session is still active
           const now = Date.now();
-          if (data.mining && data.lastClaim && now - data.lastClaim >= CLAIM_INTERVAL) {
-            const timeDiff = (now - data.lastClaim) / 1000;
-            const earned = timeDiff * MINING_RATE;
-            const newBalance = (data.balance || 0) + earned;
-            await updateDoc(docRef, { balance: newBalance, lastClaim: now });
-            data.balance = newBalance;
-            data.lastClaim = now;
-          }
-        } else {
-          data = {
-            uid: currentUser.uid,
-            email: currentUser.email,
-            username: currentUser.displayName || "User",
-            balance: 0,
-            lastClaim: Date.now(),
-            mining: true,
-            referralCode: currentUser.uid.slice(0, 6).toUpperCase(),
-            referrals: 0,
-            isAdmin: currentUser.email === "dstevinho@gmail.com",
-            createdAt: Date.now()
-          };
-          await setDoc(docRef, data);
-        }
+          const miningEnd = data.lastMiningStart? data.lastMiningStart + MINING_SESSION : 0;
+          const miningActive = data.isMining && now < miningEnd;
 
-        setUserData(data);
+          setIsMining(miningActive);
+
+          if (miningActive) {
+            const timeDiff = (now - data.lastMiningStart) / 1000;
+            const earned = timeDiff * MINING_RATE;
+            data.pendingBalance = (data.pendingBalance || 0) + earned;
+          } else if (data.isMining) {
+            // Session ended, move pending to balance
+            await updateDoc(docRef, {
+              balance: (data.balance || 0) + (data.pendingBalance || 0),
+              pendingBalance: 0,
+              isMining: false
+            });
+            data.balance = (data.balance || 0) + (data.pendingBalance || 0);
+            data.pendingBalance = 0;
+            setIsMining(false);
+          }
+
+          setUserData(data);
+        }
       } catch (err) {
         console.error("Error loading user data:", err);
       }
@@ -78,39 +72,86 @@ export default function Dashboard() {
     return unsub;
   }, [navigate]);
 
-  // Live mining + countdown timer
+  // Live counter while mining
   useEffect(() => {
-    if (!userData?.mining ||!userData?.lastClaim) {
-      setTimeLeft("Starting...");
+    if (!isMining ||!userData?.lastMiningStart) {
+      setTimeLeft("Not mining");
       return;
     }
 
     const interval = setInterval(() => {
       const now = Date.now();
-      const timeDiff = (now - userData.lastClaim) / 1000;
-      const earned = timeDiff * MINING_RATE;
-      const newBalance = (userData.balance || 0) + earned;
-
-      setUserData(prev => ({
-       ...prev,
-        balance: newBalance
-      }));
-
-      const nextClaim = userData.lastClaim + CLAIM_INTERVAL;
-      const diff = nextClaim - now;
+      const endTime = userData.lastMiningStart + MINING_SESSION;
+      const diff = endTime - now;
 
       if (diff <= 0) {
-        setTimeLeft("Ready to claim");
-      } else {
-        const hours = Math.floor(diff / 3600000);
-        const mins = Math.floor((diff % 3600000) / 60000);
-        const secs = Math.floor((diff % 60000) / 1000);
-        setTimeLeft(`${hours}h ${mins}m ${secs}s`);
+        setTimeLeft("Session ended");
+        setIsMining(false);
+        // Auto-stop and save
+        claimMining();
+        return;
       }
+
+      const hours = Math.floor(diff / 3600000);
+      const mins = Math.floor((diff % 3600000) / 60000);
+      const secs = Math.floor((diff % 60000) / 1000);
+      setTimeLeft(`${hours}h ${mins}m ${secs}s`);
+
+      // Update pending balance display
+      const timeDiff = (now - userData.lastMiningStart) / 1000;
+      const earned = timeDiff * MINING_RATE;
+      setUserData(prev => ({
+      ...prev,
+        pendingBalance: earned
+      }));
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [userData?.lastClaim, userData?.mining, userData?.balance]);
+  }, [isMining, userData?.lastMiningStart]);
+
+  const startMining = async () => {
+    if (!user || isMining) return;
+
+    const docRef = doc(db, "users", user.uid);
+    const now = Date.now();
+
+    await updateDoc(docRef, {
+      isMining: true,
+      lastMiningStart: now,
+      pendingBalance: 0
+    });
+
+    setUserData(prev => ({
+    ...prev,
+      isMining: true,
+      lastMiningStart: now,
+      pendingBalance: 0
+    }));
+    setIsMining(true);
+  };
+
+  const claimMining = async () => {
+    if (!user ||!userData) return;
+
+    const docRef = doc(db, "users", user.uid);
+    const now = Date.now();
+
+    const newBalance = (userData.balance || 0) + (userData.pendingBalance || 0);
+
+    await updateDoc(docRef, {
+      balance: newBalance,
+      pendingBalance: 0,
+      isMining: false
+    });
+
+    setUserData(prev => ({
+    ...prev,
+      balance: newBalance,
+      pendingBalance: 0,
+      isMining: false
+    }));
+    setIsMining(false);
+  };
 
   const handleCopyLink = () => {
     const referralLink = `${window.location.origin}/register?ref=${userData?.referralCode}`;
@@ -130,8 +171,9 @@ export default function Dashboard() {
     </div>
   );
 
-  const progressPercent = userData?.lastClaim 
-   ? Math.min(((Date.now() - userData.lastClaim) / CLAIM_INTERVAL) * 100, 100)
+  const totalBalance = (userData?.balance || 0) + (userData?.pendingBalance || 0);
+  const progressPercent = isMining && userData?.lastMiningStart
+   ? Math.min(((Date.now() - userData.lastMiningStart) / MINING_SESSION) * 100, 100)
     : 0;
 
   return (
@@ -164,7 +206,7 @@ export default function Dashboard() {
           <div className="bg-gray-900/60 backdrop-blur-xl p-6 rounded-2xl border-purple-500/30">
             <p className="text-gray-400 text-sm mb-1">Total Balance</p>
             <h3 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">
-              {(userData?.balance || 0).toFixed(5)}
+              {totalBalance.toFixed(5)}
             </h3>
             <p className="text-gray-500 text-xs mt-2">FMC</p>
           </div>
@@ -176,9 +218,9 @@ export default function Dashboard() {
           </div>
 
           <div className="bg-gray-900/60 backdrop-blur-xl p-6 rounded-2xl border-purple-500/30">
-            <p className="text-gray-400 text-sm mb-1">Next Auto-Claim</p>
+            <p className="text-gray-400 text-sm mb-1">Mining Status</p>
             <h3 className="text-2xl font-bold text-yellow-400">{timeLeft}</h3>
-            <p className="text-gray-500 text-xs mt-2">24h cycle</p>
+            <p className="text-gray-500 text-xs mt-2">24h session</p>
           </div>
         </div>
 
@@ -193,8 +235,25 @@ export default function Dashboard() {
               style={{ width: `${progressPercent}%` }}
             ></div>
           </div>
+
+          {!isMining? (
+            <button
+              onClick={startMining}
+              className="w-full mt-4 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold py-4 rounded-xl"
+            >
+              Start Mining
+            </button>
+          ) : (
+            <button
+              onClick={claimMining}
+              className="w-full mt-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-bold py-4 rounded-xl"
+            >
+              Claim & Stop Mining
+            </button>
+          )}
+
           <p className="text-gray-400 text-xs mt-3 text-center">
-            Auto-claim triggers every 24 hours. Balance updates live.
+            Click Start Mining. It runs for 24h, then you need to click again.
           </p>
         </div>
 
@@ -225,17 +284,6 @@ export default function Dashboard() {
               >
                 {copied? "Copied!" : "Copy"}
               </button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 text-center">
-            <div className="bg-black/30 p-3 rounded-lg">
-              <p className="text-gray-400 text-xs">Referral Bonus</p>
-              <p className="text-green-400 font-bold">+10 FMC</p>
-            </div>
-            <div className="bg-black/30 p-3 rounded-lg">
-              <p className="text-gray-400 text-xs">Min Withdrawal</p>
-              <p className="text-yellow-400 font-bold">{MIN_WITHDRAWAL} FMC</p>
             </div>
           </div>
         </div>
