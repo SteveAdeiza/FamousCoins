@@ -21,24 +21,23 @@ export default function Dashboard() {
         return;
       }
       setUser(currentUser);
-      
+
       try {
         const docRef = doc(db, "users", currentUser.uid);
         const docSnap = await getDoc(docRef);
-        
+
         let data;
         if (docSnap.exists()) {
           data = docSnap.data();
-          
-          // Create missing fields for first-time users
+
           if (!data.lastClaim) {
             data.lastClaim = Date.now();
             data.mining = true;
             data.balance = data.balance || 0;
+            data.createdAt = data.createdAt || Date.now();
             await setDoc(docRef, data, { merge: true });
           }
-          
-          // Calculate mining earnings
+
           if (data.mining && data.lastClaim) {
             const now = Date.now();
             const timeDiff = (now - data.lastClaim) / 1000;
@@ -49,7 +48,6 @@ export default function Dashboard() {
             data.lastClaim = now;
           }
         } else {
-          // Create new user doc if it doesn't exist
           data = {
             uid: currentUser.uid,
             email: currentUser.email,
@@ -59,26 +57,26 @@ export default function Dashboard() {
             mining: true,
             referralCode: currentUser.uid.slice(0, 6).toUpperCase(),
             referrals: 0,
-            isAdmin: currentUser.email === "dstevinho@gmail.com"
+            isAdmin: currentUser.email === "dstevinho@gmail.com",
+            createdAt: Date.now()
           };
           await setDoc(docRef, data);
         }
-        
+
         setUserData(data);
       } catch (err) {
         console.error("Error loading user data:", err);
         alert("Error loading data. Check console.");
       }
-      
+
       setLoading(false);
     });
     return unsub;
   }, [navigate]);
 
   const handleClaim = async () => {
-    if (!user ||!userData) return;
-    if (!userData.lastClaim) return;
-    
+    if (!user ||!userData ||!userData.lastClaim) return;
+
     setClaimLoading(true);
     try {
       const docRef = doc(db, "users", user.uid);
@@ -86,12 +84,12 @@ export default function Dashboard() {
       const timeDiff = (now - userData.lastClaim) / 1000;
       const earned = timeDiff * MINING_RATE;
       const newBalance = (userData.balance || 0) + earned;
-      
+
       await updateDoc(docRef, { balance: newBalance, lastClaim: now });
       setUserData({...userData, balance: newBalance, lastClaim: now });
     } catch (err) {
       console.error("Claim error:", err);
-      alert("Claim failed. Check console.");
+      alert("Claim failed: " + err.message);
     }
     setClaimLoading(false);
   };
