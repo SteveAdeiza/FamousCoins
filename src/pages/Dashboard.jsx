@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 import { auth, db } from "../firebase";
 
 export default function Dashboard() {
@@ -13,7 +13,6 @@ export default function Dashboard() {
 
   const MINING_RATE = 0.00005;
   const MIN_WITHDRAWAL = 1000;
-  const ADMIN_EMAIL = "dstevinho@gmail.com";
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (currentUser) => {
@@ -22,22 +21,55 @@ export default function Dashboard() {
         return;
       }
       setUser(currentUser);
-      const docRef = doc(db, "users", currentUser.uid);
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-
-        if (data.mining) {
-          const now = Date.now();
-          const timeDiff = (now - data.lastClaim) / 1000;
-          const earned = timeDiff * MINING_RATE;
-          const newBalance = (data.balance || 0) + earned;
-          await updateDoc(docRef, { balance: newBalance, lastClaim: now });
-          data.balance = newBalance;
-          data.lastClaim = now;
+      
+      try {
+        const docRef = doc(db, "users", currentUser.uid);
+        const docSnap = await getDoc(docRef);
+        
+        let data;
+        if (docSnap.exists()) {
+          data = docSnap.data();
+          
+          // Create missing fields for first-time users
+          if (!data.lastClaim) {
+            data.lastClaim = Date.now();
+            data.mining = true;
+            data.balance = data.balance || 0;
+            await setDoc(docRef, data, { merge: true });
+          }
+          
+          // Calculate mining earnings
+          if (data.mining && data.lastClaim) {
+            const now = Date.now();
+            const timeDiff = (now - data.lastClaim) / 1000;
+            const earned = timeDiff * MINING_RATE;
+            const newBalance = (data.balance || 0) + earned;
+            await updateDoc(docRef, { balance: newBalance, lastClaim: now });
+            data.balance = newBalance;
+            data.lastClaim = now;
+          }
+        } else {
+          // Create new user doc if it doesn't exist
+          data = {
+            uid: currentUser.uid,
+            email: currentUser.email,
+            username: currentUser.displayName || "User",
+            balance: 0,
+            lastClaim: Date.now(),
+            mining: true,
+            referralCode: currentUser.uid.slice(0, 6).toUpperCase(),
+            referrals: 0,
+            isAdmin: currentUser.email === "dstevinho@gmail.com"
+          };
+          await setDoc(docRef, data);
         }
+        
         setUserData(data);
+      } catch (err) {
+        console.error("Error loading user data:", err);
+        alert("Error loading data. Check console.");
       }
+      
       setLoading(false);
     });
     return unsub;
@@ -45,14 +77,22 @@ export default function Dashboard() {
 
   const handleClaim = async () => {
     if (!user ||!userData) return;
+    if (!userData.lastClaim) return;
+    
     setClaimLoading(true);
-    const docRef = doc(db, "users", user.uid);
-    const now = Date.now();
-    const timeDiff = (now - userData.lastClaim) / 1000;
-    const earned = timeDiff * MINING_RATE;
-    const newBalance = (userData.balance || 0) + earned;
-    await updateDoc(docRef, { balance: newBalance, lastClaim: now });
-    setUserData({...userData, balance: newBalance, lastClaim: now });
+    try {
+      const docRef = doc(db, "users", user.uid);
+      const now = Date.now();
+      const timeDiff = (now - userData.lastClaim) / 1000;
+      const earned = timeDiff * MINING_RATE;
+      const newBalance = (userData.balance || 0) + earned;
+      
+      await updateDoc(docRef, { balance: newBalance, lastClaim: now });
+      setUserData({...userData, balance: newBalance, lastClaim: now });
+    } catch (err) {
+      console.error("Claim error:", err);
+      alert("Claim failed. Check console.");
+    }
     setClaimLoading(false);
   };
 
@@ -80,7 +120,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="bg-gray-900/80 backdrop-blur-md p-6 rounded-2xl border border-purple-500/30 mb-4">
+        <div className="bg-gray-900/80 backdrop-blur-md p-6 rounded-2xl border-purple-500/30 mb-4">
           <p className="text-gray-400 text-sm">Welcome,</p>
           <h2 className="text-xl font-bold text-white mb-4">{userData?.username || "User"}</h2>
 
