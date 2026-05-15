@@ -8,12 +8,13 @@ export default function Dashboard() {
   const [user, setUser] = useState(null);
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [claimLoading, setClaimLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [timeLeft, setTimeLeft] = useState("");
   const navigate = useNavigate();
 
-  const MINING_RATE = 0.00005;
+  const MINING_RATE = 0.00005; // FMC per second
   const MIN_WITHDRAWAL = 1000;
+  const CLAIM_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (currentUser) => {
@@ -39,8 +40,9 @@ export default function Dashboard() {
             await setDoc(docRef, data, { merge: true });
           }
 
-          if (data.mining && data.lastClaim) {
-            const now = Date.now();
+          // Auto-claim if 24h passed
+          const now = Date.now();
+          if (data.mining && data.lastClaim && now - data.lastClaim >= CLAIM_INTERVAL) {
             const timeDiff = (now - data.lastClaim) / 1000;
             const earned = timeDiff * MINING_RATE;
             const newBalance = (data.balance || 0) + earned;
@@ -74,7 +76,7 @@ export default function Dashboard() {
     return unsub;
   }, [navigate]);
 
-  // Live mining counter - updates every second like Pi
+  // Live mining + countdown timer
   useEffect(() => {
     if (!userData?.mining ||!userData?.lastClaim) return;
 
@@ -85,33 +87,26 @@ export default function Dashboard() {
       const newBalance = (userData.balance || 0) + earned;
 
       setUserData(prev => ({
-       ...prev,
+      ...prev,
         balance: newBalance
       }));
+
+      // Update countdown to next auto-claim
+      const nextClaim = userData.lastClaim + CLAIM_INTERVAL;
+      const diff = nextClaim - now;
+
+      if (diff <= 0) {
+        setTimeLeft("Ready to claim");
+      } else {
+        const hours = Math.floor(diff / 3600000);
+        const mins = Math.floor((diff % 3600000) / 60000);
+        const secs = Math.floor((diff % 60000) / 1000);
+        setTimeLeft(`${hours}h ${mins}m ${secs}s`);
+      }
     }, 1000);
 
     return () => clearInterval(interval);
   }, [userData?.lastClaim, userData?.mining, userData?.balance]);
-
-  const handleClaim = async () => {
-    if (!user ||!userData ||!userData.lastClaim) return;
-
-    setClaimLoading(true);
-    try {
-      const docRef = doc(db, "users", user.uid);
-      const now = Date.now();
-      const timeDiff = (now - userData.lastClaim) / 1000;
-      const earned = timeDiff * MINING_RATE;
-      const newBalance = (userData.balance || 0) + earned;
-
-      await updateDoc(docRef, { balance: newBalance, lastClaim: now });
-      setUserData({...userData, balance: newBalance, lastClaim: now });
-    } catch (err) {
-      console.error("Claim error:", err);
-      alert("Claim failed: " + err.message);
-    }
-    setClaimLoading(false);
-  };
 
   const handleCopyLink = () => {
     const referralLink = `${window.location.origin}/register?ref=${userData?.referralCode}`;
@@ -122,74 +117,126 @@ export default function Dashboard() {
 
   const handleLogout = () => signOut(auth);
 
-  if (loading) return <div className="min-h-screen bg-black flex items-center justify-center text-white">Loading...</div>;
+  if (loading) return (
+    <div className="min-h-screen bg-black flex items-center justify-center">
+      <div className="text-center">
+        <div className="w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+        <p className="text-white">Loading Dashboard...</p>
+      </div>
+    </div>
+  );
+
+  const progressPercent = Math.min(((Date.now() - userData?.lastClaim) / CLAIM_INTERVAL) * 100, 100);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-black p-4">
-      <div className="max-w-2xl mx-auto">
-        <div className="flex justify-between items-center mb-6">
+    <div className="min-h-screen bg-gradient-to-br from-gray-950 via-purple-950 to-black p-4 relative overflow-hidden">
+      {/* Background glow effects */}
+      <div className="absolute top-0 left-1/4 w-96 h-96 bg-purple-600/20 rounded-full blur-3xl"></div>
+      <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-blue-600/20 rounded-full blur-3xl"></div>
+
+      <div className="max-w-5xl mx-auto relative z-10">
+        {/* Header */}
+        <div className="flex justify-between items-center mb-8">
           <div className="flex items-center gap-3">
-            <img src="/logo.webp" alt="FMC" className="w-12 h-12" />
-            <h1 className="text-2xl font-bold text-white">Famous Coins</h1>
+            <img src="/logo.webp" alt="FMC" className="w-14 h-14 drop-shadow-lg" />
+            <div>
+              <h1 className="text-3xl font-bold text-white">Famous Coins</h1>
+              <p className="text-purple-300 text-sm">Welcome back, {userData?.username}</p>
+            </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-3">
             {userData?.isAdmin && (
-              <button onClick={() => navigate("/admin")} className="bg-yellow-600 px-4 py-2 rounded-lg text-white font-semibold">
-                Admin
+              <button onClick={() => navigate("/admin")} className="bg-gradient-to-r from-yellow-500 to-yellow-600 px-5 py-2 rounded-xl text-white font-semibold hover:scale-105 transition-transform shadow-lg shadow-yellow-500/30">
+                Admin Panel
               </button>
             )}
-            <button onClick={handleLogout} className="bg-red-600 px-4 py-2 rounded-lg text-white font-semibold">
+            <button onClick={handleLogout} className="bg-gray-800 hover:bg-gray-700 px-5 py-2 rounded-xl text-white font-semibold transition-colors">
               Logout
             </button>
           </div>
         </div>
 
-        <div className="bg-gray-900/80 backdrop-blur-md p-6 rounded-2xl border-purple-500/30 mb-4">
-          <p className="text-gray-400 text-sm">Welcome,</p>
-          <h2 className="text-xl font-bold text-white mb-4">{userData?.username || "User"}</h2>
-
-          <div className="bg-black/40 p-6 rounded-xl text-center mb-4">
-            <p className="text-gray-400 text-sm mb-2">Your Balance</p>
-            <h3 className="text-4xl font-bold text-purple-400">{(userData?.balance || 0).toFixed(5)} FMC</h3>
-            <p className="text-gray-500 text-xs mt-2">Mining at {MINING_RATE} FMC/sec</p>
+        {/* Stats Grid */}
+        <div className="grid md:grid-cols-3 gap-4 mb-6">
+          <div className="bg-gray-900/60 backdrop-blur-xl p-6 rounded-2xl border-purple-500/30 hover:border-purple-500/60 transition-all">
+            <p className="text-gray-400 text-sm mb-1">Total Balance</p>
+            <h3 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">
+              {(userData?.balance || 0).toFixed(5)}
+            </h3>
+            <p className="text-gray-500 text-xs mt-2">FMC</p>
           </div>
 
-          <button
-            onClick={handleClaim}
-            disabled={claimLoading}
-            className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold py-4 rounded-xl disabled:opacity-50 mb-3"
-          >
-            {claimLoading? "Claiming..." : "Claim FMC Now"}
-          </button>
+          <div className="bg-gray-900/60 backdrop-blur-xl p-6 rounded-2xl border-purple-500/30 hover:border-purple-500/60 transition-all">
+            <p className="text-gray-400 text-sm mb-1">Mining Rate</p>
+            <h3 className="text-3xl font-bold text-green-400">{MINING_RATE}</h3>
+            <p className="text-gray-500 text-xs mt-2">FMC per second</p>
+          </div>
 
-          <div className="bg-yellow-500/10 border-yellow-500/30 p-3 rounded-lg">
-            <p className="text-yellow-300 text-xs text-center">
-              Min Withdrawal: {MIN_WITHDRAWAL} FMC - Contact Admin to withdraw
-            </p>
+          <div className="bg-gray-900/60 backdrop-blur-xl p-6 rounded-2xl border-purple-500/30 hover:border-purple-500/60 transition-all">
+            <p className="text-gray-400 text-sm mb-1">Next Auto-Claim</p>
+            <h3 className="text-2xl font-bold text-yellow-400">{timeLeft}</h3>
+            <p className="text-gray-500 text-xs mt-2">24h cycle</p>
           </div>
         </div>
 
-        <div className="bg-gray-900/80 backdrop-blur-md p-6 rounded-2xl border-purple-500/30">
-          <h3 className="text-lg font-bold text-white mb-3">Your Referral Link</h3>
+        {/* Mining Progress */}
+        <div className="bg-gray-900/60 backdrop-blur-xl p-6 rounded-2xl border-purple-500/30 mb-6">
+          <div className="flex justify-between items-center mb-3">
+            <h3 className="text-lg font-bold text-white">Mining Progress</h3>
+            <span className="text-purple-400 text-sm font-semibold">{Math.floor(progressPercent)}%</span>
+          </div>
+          <div className="w-full bg-gray-800 rounded-full h-3 overflow-hidden">
+            <div
+              className="bg-gradient-to-r from-purple-500 to-blue-500 h-3 rounded-full transition-all duration-1000"
+              style={{ width: `${progressPercent}%` }}
+            ></div>
+          </div>
+          <p className="text-gray-400 text-xs mt-3 text-center">
+            Auto-claim triggers every 24 hours. Balance updates live.
+          </p>
+        </div>
 
-          <div className="bg-black/40 p-4 rounded-lg mb-3">
-            <p className="text-gray-400 text-xs mb-1">Referral Code:</p>
-            <div className="flex justify-between items-center">
-              <span className="text-purple-400 font-mono text-lg">{userData?.referralCode || "----"}</span>
-              <button
-                onClick={handleCopyLink}
-                className="bg-purple-600 px-3 py-1 rounded text-white text-sm hover:bg-purple-700"
-              >
-                {copied? "Copied!" : "Copy Link"}
-              </button>
+        {/* Referral Section */}
+        <div className="bg-gray-900/60 backdrop-blur-xl p-6 rounded-2xl border-purple-500/30">
+          <div className="flex justify-between items-start mb-4">
+            <div>
+              <h3 className="text-lg font-bold text-white">Referral Program</h3>
+              <p className="text-gray-400 text-sm">Earn 10 FMC per referral</p>
             </div>
-            <p className="text-gray-500 text-xs mt-2 break-all">
-              {window.location.origin}/register?ref={userData?.referralCode || "CODE"}
-            </p>
+            <div className="text-right">
+              <p className="text-gray-400 text-xs">Total Referrals</p>
+              <p className="text-2xl font-bold text-purple-400">{userData?.referrals || 0}</p>
+            </div>
           </div>
 
-          <p className="text-gray-400 text-xs">Total Referrals: {userData?.referrals || 0}</p>
-          <p className="text-gray-500 text-xs mt-1">Share this link. You get 10 FMC per referral.</p>
+          <div className="bg-black/40 p-4 rounded-xl mb-3">
+            <p className="text-gray-400 text-xs mb-2">Your Referral Link</p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                readOnly
+                value={`${window.location.origin}/register?ref=${userData?.referralCode || "CODE"}`}
+                className="flex-1 bg-gray-800 text-purple-400 font-mono text-sm px-3 py-2 rounded-lg border-gray-700"
+              />
+              <button
+                onClick={handleCopyLink}
+                className="bg-gradient-to-r from-purple-600 to-blue-600 px-4 py-2 rounded-lg text-white font-semibold hover:scale-105 transition-transform"
+              >
+                {copied? "Copied!" : "Copy"}
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 text-center">
+            <div className="bg-black/30 p-3 rounded-lg">
+              <p className="text-gray-400 text-xs">Referral Bonus</p>
+              <p className="text-green-400 font-bold">+10 FMC</p>
+            </div>
+            <div className="bg-black/30 p-3 rounded-lg">
+              <p className="text-gray-400 text-xs">Min Withdrawal</p>
+              <p className="text-yellow-400 font-bold">{MIN_WITHDRAWAL} FMC</p>
+            </div>
+          </div>
         </div>
       </div>
     </div>
