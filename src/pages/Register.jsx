@@ -4,9 +4,10 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signInWithPopup,
+  updateProfile,
   onAuthStateChanged
 } from "firebase/auth";
-import { doc, setDoc, getDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc, updateDoc, collection, query, where, getDocs } from "firebase/firestore";
 import { auth, db, googleProvider } from "../firebase";
 
 export default function Register() {
@@ -34,7 +35,9 @@ export default function Register() {
     const snap = await getDoc(userRef);
 
     if (!snap.exists()) {
-      const refCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+      const refCode = user.uid.slice(0, 6).toUpperCase();
+      const refFromUrl = extraData.referredBy || "";
+
       await setDoc(userRef, {
         uid: user.uid,
         email: user.email,
@@ -43,11 +46,26 @@ export default function Register() {
         mining: true,
         lastClaim: Date.now(),
         referralCode: refCode,
-        referredBy: extraData.referredBy || "",
+        referredBy: refFromUrl,
         referrals: 0,
         isAdmin: user.email === ADMIN_EMAIL,
         createdAt: Date.now()
       });
+
+      // Give bonus to referrer if ref code exists
+      if (refFromUrl) {
+        const usersRef = collection(db, "users");
+        const q = query(usersRef, where("referralCode", "==", refFromUrl));
+        const snapRef = await getDocs(q);
+
+        if (!snapRef.empty) {
+          const referrerDoc = snapRef.docs[0];
+          await updateDoc(doc(db, "users", referrerDoc.id), {
+            referrals: (referrerDoc.data().referrals || 0) + 1,
+            balance: (referrerDoc.data().balance || 0) + 10 // 10 FMC bonus
+          });
+        }
+      }
     }
   };
 
@@ -57,6 +75,10 @@ export default function Register() {
     setLoading(true);
 
     try {
+      // Get ref code from URL
+      const urlParams = new URLSearchParams(window.location.search);
+      const refCode = urlParams.get('ref');
+
       if (isLogin) {
         await signInWithEmailAndPassword(auth, email, password);
       } else {
@@ -66,7 +88,8 @@ export default function Register() {
           return;
         }
         const userCred = await createUserWithEmailAndPassword(auth, email, password);
-        await createUserDoc(userCred.user, { username });
+        await updateProfile(userCred.user, { displayName: username });
+        await createUserDoc(userCred.user, { username, referredBy: refCode });
       }
     } catch (err) {
       setError(err.message.replace("Firebase:", ""));
@@ -78,8 +101,11 @@ export default function Register() {
     setError("");
     setLoading(true);
     try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const refCode = urlParams.get('ref');
+
       const result = await signInWithPopup(auth, googleProvider);
-      await createUserDoc(result.user);
+      await createUserDoc(result.user, { referredBy: refCode });
       navigate("/dashboard");
     } catch (err) {
       setError(err.message.replace("Firebase:", ""));
@@ -171,10 +197,10 @@ export default function Register() {
         {/* Footer with Telegram and Support Email */}
         <div className="mt-6 pt-4 border-t border-gray-700 text-center space-y-2">
           <p className="text-gray-400 text-sm">
-            Join our Telegram: 
-            <a 
-              href={TELEGRAM_LINK} 
-              target="_blank" 
+            Join our Telegram:
+            <a
+              href={TELEGRAM_LINK}
+              target="_blank"
               rel="noopener noreferrer"
               className="text-purple-400 hover:underline ml-1 font-semibold"
             >
@@ -188,4 +214,4 @@ export default function Register() {
       </div>
     </div>
   );
-      }
+}
