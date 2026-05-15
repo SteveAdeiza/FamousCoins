@@ -9,6 +9,7 @@ export default function Dashboard() {
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [claimLoading, setClaimLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
   const navigate = useNavigate();
 
   const MINING_RATE = 0.00005;
@@ -66,13 +67,31 @@ export default function Dashboard() {
         setUserData(data);
       } catch (err) {
         console.error("Error loading user data:", err);
-        alert("Error loading data. Check console.");
       }
 
       setLoading(false);
     });
     return unsub;
   }, [navigate]);
+
+  // Live mining counter - updates every second like Pi
+  useEffect(() => {
+    if (!userData?.mining ||!userData?.lastClaim) return;
+
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const timeDiff = (now - userData.lastClaim) / 1000;
+      const earned = timeDiff * MINING_RATE;
+      const newBalance = (userData.balance || 0) + earned;
+
+      setUserData(prev => ({
+       ...prev,
+        balance: newBalance
+      }));
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [userData?.lastClaim, userData?.mining, userData?.balance]);
 
   const handleClaim = async () => {
     if (!user ||!userData ||!userData.lastClaim) return;
@@ -92,6 +111,13 @@ export default function Dashboard() {
       alert("Claim failed: " + err.message);
     }
     setClaimLoading(false);
+  };
+
+  const handleCopyLink = () => {
+    const referralLink = `${window.location.origin}/register?ref=${userData?.referralCode}`;
+    navigator.clipboard.writeText(referralLink);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   const handleLogout = () => signOut(auth);
@@ -144,17 +170,26 @@ export default function Dashboard() {
         </div>
 
         <div className="bg-gray-900/80 backdrop-blur-md p-6 rounded-2xl border-purple-500/30">
-          <h3 className="text-lg font-bold text-white mb-3">Your Referral Code</h3>
-          <div className="bg-black/40 p-4 rounded-lg flex justify-between items-center">
-            <span className="text-purple-400 font-mono text-lg">{userData?.referralCode || "----"}</span>
-            <button
-              onClick={() => navigator.clipboard.writeText(userData?.referralCode || "")}
-              className="bg-purple-600 px-3 py-1 rounded text-white text-sm"
-            >
-              Copy
-            </button>
+          <h3 className="text-lg font-bold text-white mb-3">Your Referral Link</h3>
+
+          <div className="bg-black/40 p-4 rounded-lg mb-3">
+            <p className="text-gray-400 text-xs mb-1">Referral Code:</p>
+            <div className="flex justify-between items-center">
+              <span className="text-purple-400 font-mono text-lg">{userData?.referralCode || "----"}</span>
+              <button
+                onClick={handleCopyLink}
+                className="bg-purple-600 px-3 py-1 rounded text-white text-sm hover:bg-purple-700"
+              >
+                {copied? "Copied!" : "Copy Link"}
+              </button>
+            </div>
+            <p className="text-gray-500 text-xs mt-2 break-all">
+              {window.location.origin}/register?ref={userData?.referralCode || "CODE"}
+            </p>
           </div>
-          <p className="text-gray-400 text-xs mt-2">Total Referrals: {userData?.referrals || 0}</p>
+
+          <p className="text-gray-400 text-xs">Total Referrals: {userData?.referrals || 0}</p>
+          <p className="text-gray-500 text-xs mt-1">Share this link. You get 10 FMC per referral.</p>
         </div>
       </div>
     </div>
