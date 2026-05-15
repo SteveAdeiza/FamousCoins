@@ -12,9 +12,9 @@ export default function Dashboard() {
   const [timeLeft, setTimeLeft] = useState("");
   const navigate = useNavigate();
 
-  const MINING_RATE = 0.00005; // FMC per second
+  const MINING_RATE = 0.00005;
   const MIN_WITHDRAWAL = 1000;
-  const CLAIM_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours
+  const CLAIM_INTERVAL = 24 * 60 * 60 * 1000;
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (currentUser) => {
@@ -32,11 +32,13 @@ export default function Dashboard() {
         if (docSnap.exists()) {
           data = docSnap.data();
 
+          // Fix missing fields for old accounts
           if (!data.lastClaim) {
             data.lastClaim = Date.now();
             data.mining = true;
             data.balance = data.balance || 0;
             data.createdAt = data.createdAt || Date.now();
+            data.username = data.username || currentUser.displayName || "User";
             await setDoc(docRef, data, { merge: true });
           }
 
@@ -78,7 +80,10 @@ export default function Dashboard() {
 
   // Live mining + countdown timer
   useEffect(() => {
-    if (!userData?.mining ||!userData?.lastClaim) return;
+    if (!userData?.mining ||!userData?.lastClaim) {
+      setTimeLeft("Starting...");
+      return;
+    }
 
     const interval = setInterval(() => {
       const now = Date.now();
@@ -87,11 +92,10 @@ export default function Dashboard() {
       const newBalance = (userData.balance || 0) + earned;
 
       setUserData(prev => ({
-      ...prev,
+       ...prev,
         balance: newBalance
       }));
 
-      // Update countdown to next auto-claim
       const nextClaim = userData.lastClaim + CLAIM_INTERVAL;
       const diff = nextClaim - now;
 
@@ -126,22 +130,22 @@ export default function Dashboard() {
     </div>
   );
 
-  const progressPercent = Math.min(((Date.now() - userData?.lastClaim) / CLAIM_INTERVAL) * 100, 100);
+  const progressPercent = userData?.lastClaim 
+   ? Math.min(((Date.now() - userData.lastClaim) / CLAIM_INTERVAL) * 100, 100)
+    : 0;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-950 via-purple-950 to-black p-4 relative overflow-hidden">
-      {/* Background glow effects */}
       <div className="absolute top-0 left-1/4 w-96 h-96 bg-purple-600/20 rounded-full blur-3xl"></div>
       <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-blue-600/20 rounded-full blur-3xl"></div>
 
       <div className="max-w-5xl mx-auto relative z-10">
-        {/* Header */}
         <div className="flex justify-between items-center mb-8">
           <div className="flex items-center gap-3">
             <img src="/logo.webp" alt="FMC" className="w-14 h-14 drop-shadow-lg" />
             <div>
               <h1 className="text-3xl font-bold text-white">Famous Coins</h1>
-              <p className="text-purple-300 text-sm">Welcome back, {userData?.username}</p>
+              <p className="text-purple-300 text-sm">Welcome back, {userData?.username || "User"}</p>
             </div>
           </div>
           <div className="flex gap-3">
@@ -156,9 +160,8 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Stats Grid */}
         <div className="grid md:grid-cols-3 gap-4 mb-6">
-          <div className="bg-gray-900/60 backdrop-blur-xl p-6 rounded-2xl border-purple-500/30 hover:border-purple-500/60 transition-all">
+          <div className="bg-gray-900/60 backdrop-blur-xl p-6 rounded-2xl border-purple-500/30">
             <p className="text-gray-400 text-sm mb-1">Total Balance</p>
             <h3 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">
               {(userData?.balance || 0).toFixed(5)}
@@ -166,20 +169,19 @@ export default function Dashboard() {
             <p className="text-gray-500 text-xs mt-2">FMC</p>
           </div>
 
-          <div className="bg-gray-900/60 backdrop-blur-xl p-6 rounded-2xl border-purple-500/30 hover:border-purple-500/60 transition-all">
+          <div className="bg-gray-900/60 backdrop-blur-xl p-6 rounded-2xl border-purple-500/30">
             <p className="text-gray-400 text-sm mb-1">Mining Rate</p>
             <h3 className="text-3xl font-bold text-green-400">{MINING_RATE}</h3>
             <p className="text-gray-500 text-xs mt-2">FMC per second</p>
           </div>
 
-          <div className="bg-gray-900/60 backdrop-blur-xl p-6 rounded-2xl border-purple-500/30 hover:border-purple-500/60 transition-all">
+          <div className="bg-gray-900/60 backdrop-blur-xl p-6 rounded-2xl border-purple-500/30">
             <p className="text-gray-400 text-sm mb-1">Next Auto-Claim</p>
             <h3 className="text-2xl font-bold text-yellow-400">{timeLeft}</h3>
             <p className="text-gray-500 text-xs mt-2">24h cycle</p>
           </div>
         </div>
 
-        {/* Mining Progress */}
         <div className="bg-gray-900/60 backdrop-blur-xl p-6 rounded-2xl border-purple-500/30 mb-6">
           <div className="flex justify-between items-center mb-3">
             <h3 className="text-lg font-bold text-white">Mining Progress</h3>
@@ -196,7 +198,6 @@ export default function Dashboard() {
           </p>
         </div>
 
-        {/* Referral Section */}
         <div className="bg-gray-900/60 backdrop-blur-xl p-6 rounded-2xl border-purple-500/30">
           <div className="flex justify-between items-start mb-4">
             <div>
