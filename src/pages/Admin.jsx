@@ -7,6 +7,7 @@ import { auth, db } from "../firebase";
 export default function Admin() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
   const navigate = useNavigate();
 
@@ -30,27 +31,51 @@ export default function Admin() {
   }, [navigate]);
 
   const loadUsers = async () => {
-    const q = query(collection(db, "users"), orderBy("createdAt", "desc"));
-    const querySnapshot = await getDocs(q);
-    const usersList = querySnapshot.docs.map(doc => ({ id: doc.id,...doc.data() }));
-    setUsers(usersList);
+    try {
+      setError(null);
+      const q = query(collection(db, "users"), orderBy("createdAt", "desc"));
+      const querySnapshot = await getDocs(q);
+      const usersList = querySnapshot.docs.map(doc => ({ id: doc.id,...doc.data() }));
+      setUsers(usersList);
+    } catch (err) {
+      console.error("Error loading users:", err);
+      try {
+        const querySnapshot = await getDocs(collection(db, "users"));
+        const usersList = querySnapshot.docs.map(doc => ({ id: doc.id,...doc.data() }));
+        setUsers(usersList);
+        setError("Loaded without sorting. Add createdAt to users to enable sorting.");
+      } catch (err2) {
+        console.error("Fallback error:", err2);
+        setError("Failed to load users. Check Firestore rules and console.");
+      }
+    }
   };
 
   const updateBalance = async (uid, amount) => {
-    const userRef = doc(db, "users", uid);
-    await updateDoc(userRef, { balance: amount });
-    await loadUsers();
+    try {
+      const userRef = doc(db, "users", uid);
+      await updateDoc(userRef, { balance: amount });
+      await loadUsers();
+    } catch (err) {
+      alert("Update failed: " + err.message);
+    }
   };
 
   const toggleAdmin = async (uid, currentStatus) => {
-    const userRef = doc(db, "users", uid);
-    await updateDoc(userRef, { isAdmin:!currentStatus });
-    await loadUsers();
+    try {
+      const userRef = doc(db, "users", uid);
+      await updateDoc(userRef, { isAdmin:!currentStatus });
+      await loadUsers();
+    } catch (err) {
+      alert("Update failed: " + err.message);
+    }
   };
 
   const handleLogout = () => signOut(auth);
 
   if (loading) return <div className="min-h-screen bg-black flex items-center justify-center text-white">Loading Admin...</div>;
+
+  if (error && users.length === 0) return <div className="min-h-screen bg-black flex items-center justify-center text-red-400 p-4">{error}</div>;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-purple-900 p-4">
@@ -59,6 +84,7 @@ export default function Admin() {
           <div>
             <h1 className="text-3xl font-bold text-white">Admin Panel</h1>
             <p className="text-purple-300">Logged in as: {currentUser?.email}</p>
+            {error && <p className="text-yellow-400 text-xs mt-1">{error}</p>}
           </div>
           <div className="flex gap-2">
             <button onClick={() => navigate("/dashboard")} className="bg-blue-600 px-4 py-2 rounded-lg text-white font-semibold">
@@ -70,7 +96,7 @@ export default function Admin() {
           </div>
         </div>
 
-        <div className="bg-gray-900/80 backdrop-blur-md rounded-2xl border-purple-500/30 overflow-hidden">
+        <div className="bg-gray-900/80 backdrop-blur-md rounded-2xl border border-purple-500/30 overflow-hidden">
           <div className="p-4 bg-black/40">
             <h2 className="text-xl font-bold text-white">All Users - {users.length}</h2>
           </div>
@@ -125,4 +151,4 @@ export default function Admin() {
       </div>
     </div>
   );
-                }
+}
