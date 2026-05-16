@@ -38,6 +38,11 @@ export default function Register() {
       const refCode = user.uid.slice(0, 6).toUpperCase();
       const refFromUrl = extraData.referredBy || "";
 
+      // FIX: Don't save "undefined" as a referral
+      const validRef = refFromUrl && refFromUrl!== "undefined" && refFromUrl!== ""
+       ? refFromUrl
+        : "";
+
       await setDoc(userRef, {
         uid: user.uid,
         email: user.email,
@@ -46,23 +51,23 @@ export default function Register() {
         mining: true,
         lastClaim: Date.now(),
         referralCode: refCode,
-        referredBy: refFromUrl,
+        referredBy: validRef, // <- fixed
         referrals: 0,
         isAdmin: user.email === ADMIN_EMAIL,
         createdAt: Date.now()
       });
 
-      // Give bonus to referrer if ref code exists
-      if (refFromUrl) {
+      // Give bonus to referrer only if valid
+      if (validRef) {
         const usersRef = collection(db, "users");
-        const q = query(usersRef, where("referralCode", "==", refFromUrl));
+        const q = query(usersRef, where("referralCode", "==", validRef));
         const snapRef = await getDocs(q);
 
         if (!snapRef.empty) {
           const referrerDoc = snapRef.docs[0];
           await updateDoc(doc(db, "users", referrerDoc.id), {
             referrals: (referrerDoc.data().referrals || 0) + 1,
-            balance: (referrerDoc.data().balance || 0) + 10 // 10 FMC bonus
+            balance: (referrerDoc.data().balance || 0) + 10
           });
         }
       }
@@ -75,7 +80,6 @@ export default function Register() {
     setLoading(true);
 
     try {
-      // Get ref code from URL
       const urlParams = new URLSearchParams(window.location.search);
       const refCode = urlParams.get('ref');
 
@@ -194,7 +198,6 @@ export default function Register() {
           </button>
         </p>
 
-        {/* Footer with Telegram and Support Email */}
         <div className="mt-6 pt-4 border-t border-gray-700 text-center space-y-2">
           <p className="text-gray-400 text-sm">
             Join our Telegram:
@@ -214,4 +217,4 @@ export default function Register() {
       </div>
     </div>
   );
-}
+      }
