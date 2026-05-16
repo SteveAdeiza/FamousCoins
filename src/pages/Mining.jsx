@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { doc, getDoc, updateDoc, increment } from "firebase/firestore";
 import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
@@ -6,59 +6,97 @@ import coinImg from "../assets/fmc-coin.png";
 
 export default function Mining() {
   const { user } = useAuth();
+  const [loading, setLoading] = useState(true);
   const [balance, setBalance] = useState(0);
   const [hashRate, setHashRate] = useState(0);
   const [isMining, setIsMining] = useState(false);
   const [timeLeft, setTimeLeft] = useState(0);
   const [earnings, setEarnings] = useState(0);
+  const intervalRef = useRef(null);
 
+  // Fetch user data on mount
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
     const fetchData = async () => {
-      const userRef = doc(db, "users", user.uid);
-      const snap = await getDoc(userRef);
-      if (snap.exists()) {
-        const data = snap.data();
-        setBalance(data.balance || 0);
-        setHashRate(data.hashRate || 0);
-        setIsMining(data.isMining || false);
-        setTimeLeft(data.timeLeft || 0);
+      try {
+        const userRef = doc(db, "users", user.uid);
+        const snap = await getDoc(userRef);
+        if (snap.exists()) {
+          const data = snap.data();
+          setBalance(data.balance || 0);
+          setHashRate(data.hashRate || 0);
+          setIsMining(data.isMining || false);
+          setTimeLeft(data.timeLeft || 0);
+        }
+      } catch (err) {
+        console.error("Error fetching mining data:", err);
+      } finally {
+        setLoading(false);
       }
     };
+
     fetchData();
   }, [user]);
 
+  // Mining loop
   useEffect(() => {
-    let interval;
     if (isMining && timeLeft > 0) {
-      interval = setInterval(async () => {
-        const newTime = timeLeft - 1;
-        const earned = hashRate / 3600;
-        setTimeLeft(newTime);
-        setEarnings((prev) => prev + earned);
-        setBalance((prev) => prev + earned);
+      intervalRef.current = setInterval(() => {
+        setTimeLeft((prevTime) => {
+          const newTime = prevTime - 1;
+          const earned = hashRate / 3600;
 
-        const userRef = doc(db, "users", user.uid);
-        await updateDoc(userRef, {
-          timeLeft: newTime,
-          balance: increment(earned),
+          setEarnings((prev) => prev + earned);
+          setBalance((prev) => prev + earned);
+
+          const userRef = doc(db, "users", user.uid);
+          updateDoc(userRef, {
+            timeLeft: newTime,
+            balance: increment(earned),
+          }).catch((err) => console.error("Update error:", err));
+
+          if (newTime <= 0) {
+            setIsMining(false);
+            updateDoc(userRef, { isMining: false }).catch((err) =>
+              console.error("Update error:", err)
+            );
+          }
+
+          return newTime;
         });
-
-        if (newTime <= 0) {
-          setIsMining(false);
-          await updateDoc(userRef, { isMining: false });
-        }
       }, 1000);
     }
-    return () => clearInterval(interval);
-  }, [isMining, timeLeft, hashRate, user]);
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, [isMining, hashRate, user]);
 
   const startMining = async () => {
-    if (!user) return;
-    setIsMining(true);
-    setTimeLeft(86400);
-    const userRef = doc(db, "users", user.uid);
-    await updateDoc(userRef, { isMining: true, timeLeft: 86400 });
+    if (!user || isMining) return;
+
+    try {
+      setIsMining(true);
+      setTimeLeft(86400);
+      setEarnings(0);
+
+      const userRef = doc(db, "users", user.uid);
+      await updateDoc(userRef, {
+        isMining: true,
+        timeLeft: 86400
+      });
+    } catch (err) {
+      console.error("Error starting mining:", err);
+      setIsMining(false);
+      setTimeLeft(0);
+    }
   };
 
   const formatTime = (secs) => {
@@ -67,6 +105,22 @@ export default function Mining() {
     const s = secs % 60;
     return `${h}h ${m}m ${s}s`;
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0a] text-white flex items-center justify-center">
+        <p className="text-gray-400">Loading...</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0a] text-white flex items-center justify-center">
+        <p className="text-gray-400">Please log in to start mining</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white p-6 flex-col items-center">
