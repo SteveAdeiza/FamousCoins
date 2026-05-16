@@ -15,7 +15,7 @@ export default function Dashboard() {
 
   const MINING_RATE = 0.00005;
   const MIN_WITHDRAWAL = 1000;
-  const MINING_SESSION = 24 * 60 * 60 * 1000; // 24 hours
+  const MINING_SESSION = 24 * 60 * 60 * 1000;
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (currentUser) => {
@@ -30,7 +30,13 @@ export default function Dashboard() {
         const docSnap = await getDoc(docRef);
 
         if (docSnap.exists()) {
-          const data = docSnap.data();
+          let data = docSnap.data();
+
+          // Create referralCode if missing
+          if (!data.referralCode) {
+            data.referralCode = currentUser.uid.slice(0, 6).toUpperCase();
+            await updateDoc(docRef, { referralCode: data.referralCode });
+          }
 
           // Fix missing username
           if (!data.username) {
@@ -38,7 +44,6 @@ export default function Dashboard() {
             await updateDoc(docRef, { username: data.username });
           }
 
-          // Check if mining session is still active
           const now = Date.now();
           const miningEnd = data.lastMiningStart? data.lastMiningStart + MINING_SESSION : 0;
           const miningActive = data.isMining && now < miningEnd;
@@ -50,7 +55,6 @@ export default function Dashboard() {
             const earned = timeDiff * MINING_RATE;
             data.pendingBalance = (data.pendingBalance || 0) + earned;
           } else if (data.isMining) {
-            // Session ended, move pending to balance
             await updateDoc(docRef, {
               balance: (data.balance || 0) + (data.pendingBalance || 0),
               pendingBalance: 0,
@@ -72,7 +76,6 @@ export default function Dashboard() {
     return unsub;
   }, [navigate]);
 
-  // Live counter while mining
   useEffect(() => {
     if (!isMining ||!userData?.lastMiningStart) {
       setTimeLeft("Not mining");
@@ -87,7 +90,6 @@ export default function Dashboard() {
       if (diff <= 0) {
         setTimeLeft("Session ended");
         setIsMining(false);
-        // Auto-stop and save
         claimMining();
         return;
       }
@@ -97,11 +99,10 @@ export default function Dashboard() {
       const secs = Math.floor((diff % 60000) / 1000);
       setTimeLeft(`${hours}h ${mins}m ${secs}s`);
 
-      // Update pending balance display
       const timeDiff = (now - userData.lastMiningStart) / 1000;
       const earned = timeDiff * MINING_RATE;
       setUserData(prev => ({
-      ...prev,
+     ...prev,
         pendingBalance: earned
       }));
     }, 1000);
@@ -122,7 +123,7 @@ export default function Dashboard() {
     });
 
     setUserData(prev => ({
-    ...prev,
+   ...prev,
       isMining: true,
       lastMiningStart: now,
       pendingBalance: 0
@@ -134,8 +135,6 @@ export default function Dashboard() {
     if (!user ||!userData) return;
 
     const docRef = doc(db, "users", user.uid);
-    const now = Date.now();
-
     const newBalance = (userData.balance || 0) + (userData.pendingBalance || 0);
 
     await updateDoc(docRef, {
@@ -145,7 +144,7 @@ export default function Dashboard() {
     });
 
     setUserData(prev => ({
-    ...prev,
+   ...prev,
       balance: newBalance,
       pendingBalance: 0,
       isMining: false
@@ -154,7 +153,8 @@ export default function Dashboard() {
   };
 
   const handleCopyLink = () => {
-    const referralLink = `${window.location.origin}/register?ref=${userData?.referralCode}`;
+    if (!userData?.referralCode) return; // <- FIX 1
+    const referralLink = `${window.location.origin}/register?ref=${userData.referralCode}`;
     navigator.clipboard.writeText(referralLink);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -173,7 +173,7 @@ export default function Dashboard() {
 
   const totalBalance = (userData?.balance || 0) + (userData?.pendingBalance || 0);
   const progressPercent = isMining && userData?.lastMiningStart
-   ? Math.min(((Date.now() - userData.lastMiningStart) / MINING_SESSION) * 100, 100)
+  ? Math.min(((Date.now() - userData.lastMiningStart) / MINING_SESSION) * 100, 100)
     : 0;
 
   return (
@@ -269,18 +269,23 @@ export default function Dashboard() {
             </div>
           </div>
 
+          {/* FIX 2: Don't show link until referralCode loads */}
           <div className="bg-black/40 p-4 rounded-xl mb-3">
             <p className="text-gray-400 text-xs mb-2">Your Referral Link</p>
             <div className="flex gap-2">
               <input
                 type="text"
                 readOnly
-                value={`${window.location.origin}/register?ref=${userData?.referralCode || "CODE"}`}
+                value={userData?.referralCode
+                 ? `${window.location.origin}/register?ref=${userData.referralCode}`
+                  : "Loading..."
+                }
                 className="flex-1 bg-gray-800 text-purple-400 font-mono text-sm px-3 py-2 rounded-lg border-gray-700"
               />
               <button
                 onClick={handleCopyLink}
-                className="bg-gradient-to-r from-purple-600 to-blue-600 px-4 py-2 rounded-lg text-white font-semibold hover:scale-105 transition-transform"
+                disabled={!userData?.referralCode}
+                className="bg-gradient-to-r from-purple-600 to-blue-600 px-4 py-2 rounded-lg text-white font-semibold hover:scale-105 transition-transform disabled:opacity-50"
               >
                 {copied? "Copied!" : "Copy"}
               </button>
