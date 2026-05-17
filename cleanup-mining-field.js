@@ -1,14 +1,6 @@
 import admin from 'firebase-admin'
-import fs from 'fs'
-import path from 'path'
-import { fileURLToPath } from 'url'
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
-
-const serviceAccount = JSON.parse(
-  fs.readFileSync(path.join(__dirname, 'serviceAccountKey.json'), 'utf8')
-)
+const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
@@ -19,49 +11,50 @@ const db = admin.firestore()
 async function cleanupUsers() {
   const usersRef = db.collection('users')
   const snapshot = await usersRef.get()
-  
+
   let deletedMining = 0
   let addedHashRate = 0
-  const batch = db.batch()
 
-  snapshot.forEach(doc => {
-    const data = doc.data()
-    const updates = {}
+  const docs = snapshot.docs
+  const chunkSize = 500
 
-    if (data.mining !== undefined) {
-      updates.mining = admin.firestore.FieldValue.delete()
-      deletedMining++
-    }
+  for (let i = 0; i < docs.length; i += chunkSize) {
+    const batch = db.batch()
+    const chunk = docs.slice(i, i + chunkSize)
 
-    if (data.hashRate === undefined || data.hashRate === null) {
-      updates.hashRate = 100
-      addedHashRate++
-    }
+    chunk.forEach(doc => {
+      const data = doc.data()
+      const updates = {}
 
-    if (data.isMining === undefined) {
-      updates.isMining = false
-    }
-    if (data.timeLeft === undefined) {
-      updates.timeLeft = 0
-    }
+      if (data.mining !== undefined) {
+        updates.mining = admin.firestore.FieldValue.delete()
+        deletedMining++
+      }
 
-    if (Object.keys(updates).length > 0) {
-      batch.update(doc.ref, updates)
-    }
-  })
+      if (data.hashRate === undefined || data.hashRate === null) {
+        updates.hashRate = 100
+        addedHashRate++
+      }
 
-  if (deletedMining === 0 && addedHashRate === 0) {
-    console.log('Nothing to update. All users are clean.')
-    process.exit(0)
-    return
+      if (data.isMining === undefined) {
+        updates.isMining = false
+      }
+
+      if (data.timeLeft === undefined) {
+        updates.timeLeft = 0
+      }
+
+      if (Object.keys(updates).length > 0) {
+        batch.update(doc.ref, updates)
+      }
+    })
+
+    await batch.commit()
   }
 
-  await batch.commit()
   console.log(`Done!`)
   console.log(`- Removed 'mining' field from ${deletedMining} users`)
   console.log(`- Added hashRate: 100 to ${addedHashRate} users`)
-  
-  process.exit(0)
 }
 
 cleanupUsers().catch(err => {
