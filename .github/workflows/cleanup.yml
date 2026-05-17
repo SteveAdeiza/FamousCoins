@@ -19,4 +19,4 @@ jobs:
           FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
         run: |
           echo "$FIREBASE_KEY" > serviceAccountKey.json
-          node cleanup-mining-field.js
+          node cleanup-mining-field.cjs
