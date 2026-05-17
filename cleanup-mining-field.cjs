@@ -1,6 +1,6 @@
 const admin = require('firebase-admin');
 
-const serviceAccount = require('./serviceAccountKey.json'); // path to your downloaded key
+const serviceAccount = require('./serviceAccountKey.json');
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
@@ -20,19 +20,16 @@ async function cleanupUsers() {
     const data = doc.data();
     const updates = {};
 
-    // 1. Delete old 'mining' field if it exists
     if (data.mining !== undefined) {
       updates.mining = admin.firestore.FieldValue.delete();
       deletedMining++;
     }
 
-    // 2. Add hashRate: 100 if it doesn't exist
     if (data.hashRate === undefined || data.hashRate === null) {
       updates.hashRate = 100;
       addedHashRate++;
     }
 
-    // 3. Make sure isMining and timeLeft exist too
     if (data.isMining === undefined) {
       updates.isMining = false;
     }
@@ -47,6 +44,7 @@ async function cleanupUsers() {
 
   if (deletedMining === 0 && addedHashRate === 0) {
     console.log('Nothing to update. All users are clean.');
+    process.exit(0);
     return;
   }
 
@@ -54,6 +52,11 @@ async function cleanupUsers() {
   console.log(`Done!`);
   console.log(`- Removed 'mining' field from ${deletedMining} users`);
   console.log(`- Added hashRate: 100 to ${addedHashRate} users`);
+  
+  process.exit(0); // <-- Add this line
 }
 
-cleanupUsers().catch(console.error);
+cleanupUsers().catch(err => {
+  console.error(err);
+  process.exit(1); // exit with error code if it fails
+});
