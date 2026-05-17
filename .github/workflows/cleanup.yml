@@ -1,21 +1,24 @@
 name: Cleanup Mining Field
+
 on:
-  workflow_dispatch: # lets you run it manually from GitHub
+  workflow_dispatch:
 
 jobs:
   cleanup:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v3
+
       - name: Setup Node
         uses: actions/setup-node@v3
         with:
           node-version: '18'
-      - name: Install Firebase Admin
-        run: npm install firebase-admin
+
+      - name: Install Dependencies
+        run: npm install
+
       - name: Run Cleanup Script
         env:
-          FIREBASE_KEY: ${{ secrets.FIREBASE_KEY }}
-        run: |
-          echo "$FIREBASE_KEY" > serviceAccountKey.json
-          node cleanup-mining-field.js
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node cleanup-mining-field.js
