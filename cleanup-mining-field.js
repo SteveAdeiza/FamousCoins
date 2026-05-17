@@ -1,4 +1,5 @@
 import admin from 'firebase-admin'
+console.log("ENV CHECK:", process.env.FIREBASE_SERVICE_ACCOUNT)
 
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
 
